@@ -1,0 +1,58 @@
+//@version=5
+indicator("Ichimoku Short Signals", shorttitle="Ichi Short", overlay=true)
+// Description: Ichimoku Cloud with short entry signals and fractals
+// Shows sell signals when: TK Cross Down + Price Below Cloud Resistance + Bearish Cloud
+
+// Ichimoku Settings
+conversionPeriods = input.int(20, minval=1, title="Conversion Line Length")
+basePeriods = input.int(60, minval=1, title="Base Line Length")
+laggingSpan2Periods = input.int(120, minval=1, title="Leading Span B Length")
+displacement = input.int(30, minval=1, title="Lagging Span")
+
+// Fractal Settings
+n = input.int(title="Fractal Periods", defval=2, minval=2)
+
+// Donchian calculation
+donchian(len) => math.avg(ta.lowest(len), ta.highest(len))
+
+// Ichimoku Lines
+conversionLine = donchian(conversionPeriods)
+baseLine = donchian(basePeriods)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(laggingSpan2Periods)
+
+// Plot Ichimoku
+plot(conversionLine, color=#2962FF, title="Conversion Line", linewidth=3)
+plot(baseLine, color=#B71C1C, title="Base Line", linewidth=3)
+
+p1 = plot(leadLine1, offset = displacement - 1, color=#A5D6A7, title="Leading Span A")
+p2 = plot(leadLine2, offset = displacement - 1, color=#EF9A9A, title="Leading Span B")
+
+plot(leadLine1 > leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = "Kumo Cloud Upper Line", display = display.none)
+plot(leadLine1 < leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = "Kumo Cloud Lower Line", display = display.none)
+
+fill(p1, p2, color = leadLine1 > leadLine2 ? color.rgb(67, 160, 71, 50) : color.rgb(244, 67, 54, 50))
+
+// Cloud conditions
+offsetLeadline1 = leadLine1[displacement - 1]
+offsetLeadline2 = leadLine2[displacement - 1]
+
+bool bearishCloud = leadLine1 < leadLine2
+bool TKCrossDown = conversionLine < baseLine
+bool priceBelowResistance = close <= offsetLeadline2
+
+// Fractals
+upFractal = (high[n+2] < high[n]) and (high[n+1] < high[n]) and (high[n-1] < high[n]) and (high[n-2] < high[n])
+dnFractal = (low[n+2] > low[n]) and (low[n+1] > low[n]) and (low[n-1] > low[n]) and (low[n-2] > low[n])
+
+plotshape(dnFractal, style=shape.triangledown, location=location.belowbar, offset=-2, color=color.rgb(67, 160, 71, 50), size=size.small, show_last=200)
+plotshape(upFractal, style=shape.triangleup, location=location.abovebar, offset=-2, color=color.rgb(244, 67, 54, 50), size=size.small, show_last=200)
+
+// Short Signal - fires once when all conditions align
+shortCondition = TKCrossDown and priceBelowResistance and bearishCloud
+shortSignal = shortCondition and not shortCondition[1]
+
+plotshape(shortSignal, style=shape.labeldown, location=location.abovebar, color=color.red, size=size.normal, text="SHORT", textcolor=color.white, title="Short Signal")
+
+// Alert
+alertcondition(shortSignal, title="Short Entry", message="Ichimoku Short Signal")
