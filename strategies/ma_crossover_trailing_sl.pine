@@ -43,7 +43,8 @@ var float highestProfitPercent = na
 // Track entry price and reset variables on new position
 if longEntry
     entryPrice := close
-    currentStopLevel := na
+    // Set initial stop loss at -tslIncrement% below entry
+    currentStopLevel := useTSL ? close * (1 - tslIncrement / 100) : na
     highestProfitPercent := 0.0
 
 // Calculate current profit percentage
@@ -54,16 +55,17 @@ if useTSL and strategy.position_size > 0
     // Calculate how many increment steps we've achieved
     stepsAchieved = math.floor(profitPercent / tslIncrement)
 
+    // Stop loss progression (steps - 1) * increment:
+    // Entry (0 steps)         -> SL at -2.5%
+    // At 2.5% profit (1 step) -> SL at 0%
+    // At 5.0% profit (2 steps) -> SL at 2.5%
+    // At 7.5% profit (3 steps) -> SL at 5.0%
     if stepsAchieved >= 1
-        // Stop loss is set to (steps - 1) * increment
-        // At 2.5% profit (1 step) -> SL at 0%
-        // At 5.0% profit (2 steps) -> SL at 2.5%
-        // At 7.5% profit (3 steps) -> SL at 5.0%
         newStopPercent = (stepsAchieved - 1) * tslIncrement
         newStopPrice = entryPrice * (1 + newStopPercent / 100)
 
         // Only update if new stop is higher (trailing up only)
-        if na(currentStopLevel) or newStopPrice > currentStopLevel
+        if newStopPrice > currentStopLevel
             currentStopLevel := newStopPrice
 
 // ==================== EXIT CONDITIONS ====================
