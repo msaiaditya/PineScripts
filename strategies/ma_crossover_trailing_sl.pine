@@ -1,10 +1,11 @@
 //@version=5
 strategy("MA Crossover with Trailing SL", shorttitle="MA Cross TSL", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
 
-// Description: Long-only strategy with MA crossover entry and arithmetic progression trailing stop loss
+// Description: Long-only intraday strategy with MA crossover entry and arithmetic progression trailing stop loss
 // Entry: Previous close below MA and current close above MA
 // Exit 1: Close below Y% of MA
 // Exit 2: Trailing stop loss with configurable increment steps
+// Exit 3: End of day - no overnight positions
 
 // ==================== INPUTS ====================
 // MA Settings
@@ -13,6 +14,8 @@ maType = input.string("SMA", title="MA Type", options=["SMA", "EMA", "WMA", "RMA
 
 // Exit Settings
 exitBelowMaPercent = input.float(1.0, minval=0.1, step=0.1, title="Exit Below MA (%)", group="Exit Conditions", tooltip="Close position if price drops below this % of MA")
+closeEOD = input.bool(true, title="Close at End of Day", group="Exit Conditions", tooltip="Close all positions at end of trading session")
+eodTime = input.session("1500-1530", title="EOD Exit Window", group="Exit Conditions", tooltip="Time window to close positions (exchange timezone)")
 
 // Trailing Stop Loss Settings
 useTSL = input.bool(true, title="Enable Trailing Stop Loss", group="Trailing Stop Loss")
@@ -75,6 +78,10 @@ exitBelowMa = strategy.position_size > 0 and close < maExitThreshold
 // Exit 2: Trailing stop loss hit (only if TSL is enabled)
 trailingStopHit = useTSL and strategy.position_size > 0 and not na(currentStopLevel) and close < currentStopLevel
 
+// Exit 3: End of day - close positions before session ends
+inEodWindow = not na(time(timeframe.period, eodTime))
+eodExit = closeEOD and strategy.position_size > 0 and inEodWindow
+
 // ==================== EXECUTE TRADES ====================
 if longEntry
     strategy.entry("Long", strategy.long)
@@ -84,6 +91,9 @@ if exitBelowMa
 
 if trailingStopHit
     strategy.close("Long", comment="Trailing SL")
+
+if eodExit
+    strategy.close("Long", comment="EOD Exit")
 
 // ==================== PLOTTING ====================
 // Plot MA
@@ -111,3 +121,4 @@ if barstate.islast and strategy.position_size > 0
 alertcondition(longEntry, title="Long Entry", message="MA Crossover Long Entry Signal")
 alertcondition(exitBelowMa, title="Exit Below MA", message="Price dropped below MA threshold - Exit")
 alertcondition(trailingStopHit, title="Trailing Stop Hit", message="Trailing Stop Loss triggered")
+alertcondition(eodExit, title="EOD Exit", message="End of day - closing position")
