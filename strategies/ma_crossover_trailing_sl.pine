@@ -1,0 +1,110 @@
+//@version=5
+strategy("MA Crossover with Trailing SL", shorttitle="MA Cross TSL", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// Description: Long-only strategy with MA crossover entry and arithmetic progression trailing stop loss
+// Entry: Previous close below MA and current close above MA
+// Exit 1: Close below Y% of MA
+// Exit 2: Trailing stop loss with configurable increment steps
+
+// ==================== INPUTS ====================
+// MA Settings
+maLength = input.int(9, minval=1, title="MA Length", group="Moving Average")
+maType = input.string("SMA", title="MA Type", options=["SMA", "EMA", "WMA", "RMA"], group="Moving Average")
+
+// Exit Settings
+exitBelowMaPercent = input.float(1.0, minval=0.1, step=0.1, title="Exit Below MA (%)", group="Exit Conditions", tooltip="Close position if price drops below this % of MA")
+
+// Trailing Stop Loss Settings
+tslIncrement = input.float(2.5, minval=0.5, step=0.5, title="TSL Increment (%)", group="Trailing Stop Loss", tooltip="Profit increment steps for trailing stop")
+
+// ==================== CALCULATIONS ====================
+// Calculate MA based on selected type
+ma = switch maType
+    "SMA" => ta.sma(close, maLength)
+    "EMA" => ta.ema(close, maLength)
+    "WMA" => ta.wma(close, maLength)
+    "RMA" => ta.rma(close, maLength)
+    => ta.sma(close, maLength)
+
+// MA threshold for exit (Y% below MA)
+maExitThreshold = ma * (1 - exitBelowMaPercent / 100)
+
+// ==================== ENTRY CONDITIONS ====================
+// Long entry: previous close below MA AND current close above MA
+crossoverCondition = close[1] < ma[1] and close > ma
+longEntry = crossoverCondition and strategy.position_size == 0
+
+// ==================== TRAILING STOP LOSS LOGIC ====================
+var float entryPrice = na
+var float currentStopLevel = na
+var float highestProfitPercent = na
+
+// Track entry price and reset variables on new position
+if longEntry
+    entryPrice := close
+    currentStopLevel := na
+    highestProfitPercent := 0.0
+
+// Calculate current profit percentage
+profitPercent = strategy.position_size > 0 ? (close - entryPrice) / entryPrice * 100 : 0.0
+
+// Update trailing stop based on arithmetic progression
+if strategy.position_size > 0
+    // Calculate how many increment steps we've achieved
+    stepsAchieved = math.floor(profitPercent / tslIncrement)
+
+    if stepsAchieved >= 1
+        // Stop loss is set to (steps - 1) * increment
+        // At 2.5% profit (1 step) -> SL at 0%
+        // At 5.0% profit (2 steps) -> SL at 2.5%
+        // At 7.5% profit (3 steps) -> SL at 5.0%
+        newStopPercent = (stepsAchieved - 1) * tslIncrement
+        newStopPrice = entryPrice * (1 + newStopPercent / 100)
+
+        // Only update if new stop is higher (trailing up only)
+        if na(currentStopLevel) or newStopPrice > currentStopLevel
+            currentStopLevel := newStopPrice
+
+// ==================== EXIT CONDITIONS ====================
+// Exit 1: Close below Y% of MA
+exitBelowMa = strategy.position_size > 0 and close < maExitThreshold
+
+// Exit 2: Trailing stop loss hit
+trailingStopHit = strategy.position_size > 0 and not na(currentStopLevel) and close < currentStopLevel
+
+// ==================== EXECUTE TRADES ====================
+if longEntry
+    strategy.entry("Long", strategy.long)
+
+if exitBelowMa
+    strategy.close("Long", comment="Below MA Exit")
+
+if trailingStopHit
+    strategy.close("Long", comment="Trailing SL")
+
+// ==================== PLOTTING ====================
+// Plot MA
+plot(ma, color=color.blue, linewidth=2, title="MA")
+
+// Plot MA exit threshold
+plot(maExitThreshold, color=color.orange, linewidth=1, style=plot.style_circles, title="MA Exit Level")
+
+// Plot trailing stop level when in position
+stopPlot = strategy.position_size > 0 and not na(currentStopLevel) ? currentStopLevel : na
+plot(stopPlot, color=color.red, linewidth=2, style=plot.style_stepline, title="Trailing Stop")
+
+// Plot entry price when in position
+entryPlot = strategy.position_size > 0 ? entryPrice : na
+plot(entryPlot, color=color.green, linewidth=1, style=plot.style_linebr, title="Entry Price")
+
+// ==================== LABELS & INFO ====================
+// Show profit percentage and stop level on chart
+if barstate.islast and strategy.position_size > 0
+    labelText = "Profit: " + str.tostring(profitPercent, "#.##") + "%\n"
+    labelText += na(currentStopLevel) ? "TSL: Not Active" : "TSL: " + str.tostring(currentStopLevel, "#.##") + " (" + str.tostring((currentStopLevel - entryPrice) / entryPrice * 100, "#.##") + "%)"
+    label.new(bar_index, high, labelText, style=label.style_label_down, color=color.new(color.blue, 80), textcolor=color.white)
+
+// ==================== ALERTS ====================
+alertcondition(longEntry, title="Long Entry", message="MA Crossover Long Entry Signal")
+alertcondition(exitBelowMa, title="Exit Below MA", message="Price dropped below MA threshold - Exit")
+alertcondition(trailingStopHit, title="Trailing Stop Hit", message="Trailing Stop Loss triggered")
