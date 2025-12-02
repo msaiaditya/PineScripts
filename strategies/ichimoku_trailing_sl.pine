@@ -1,0 +1,152 @@
+//@version=5
+strategy("Ichimoku Cloud with Trailing SL", shorttitle="Ichi TSL", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+
+// Description: Long-only strategy using Ichimoku Cloud for entries with arithmetic progression trailing stop loss
+// Entry: TK Cross Up + Price Above Cloud Support + Bullish Cloud
+// Exit 1: TK Cross Down (bearish signal)
+// Exit 2: Trailing stop loss with configurable 1% increment steps
+
+// ==================== INPUTS ====================
+// Ichimoku Settings
+conversionPeriods = input.int(20, minval=1, title="Conversion Line Length", group="Ichimoku")
+basePeriods = input.int(60, minval=1, title="Base Line Length", group="Ichimoku")
+laggingSpan2Periods = input.int(120, minval=1, title="Leading Span B Length", group="Ichimoku")
+displacement = input.int(30, minval=1, title="Displacement", group="Ichimoku")
+
+// Trading Session Settings
+tradingSession = input.session("0915-1500", title="Trading Session", group="Trading Hours", tooltip="Time window for new entries (exchange timezone)")
+
+// Exit Settings
+closeEOD = input.bool(true, title="Close at End of Day", group="Exit Conditions", tooltip="Close all positions at end of trading session")
+eodTime = input.session("1500-1530", title="EOD Exit Window", group="Exit Conditions", tooltip="Time window to close positions (exchange timezone)")
+
+// Trailing Stop Loss Settings
+useTSL = input.bool(true, title="Enable Trailing Stop Loss", group="Trailing Stop Loss")
+tslIncrement = input.float(1.0, minval=0.5, step=0.5, title="TSL Increment (%)", group="Trailing Stop Loss", tooltip="Profit increment steps for trailing stop (e.g., 1% means SL moves up every 1% profit)")
+initialSLPercent = input.float(1.0, minval=0.5, step=0.5, title="Initial Stop Loss (%)", group="Trailing Stop Loss", tooltip="Initial stop loss below entry price")
+
+// ==================== ICHIMOKU CALCULATIONS ====================
+// Donchian calculation
+donchian(len) => math.avg(ta.lowest(len), ta.highest(len))
+
+// Ichimoku Lines
+conversionLine = donchian(conversionPeriods)
+baseLine = donchian(basePeriods)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(laggingSpan2Periods)
+
+// Cloud conditions (using displaced values for current price position)
+offsetLeadline1 = leadLine1[displacement - 1]
+offsetLeadline2 = leadLine2[displacement - 1]
+
+bool bullishCloud = leadLine1 > leadLine2
+bool bearishCloud = leadLine1 < leadLine2
+bool TKCrossUp = conversionLine > baseLine
+bool TKCrossDown = conversionLine < baseLine
+bool priceAboveSupport = close >= offsetLeadline1
+bool priceBelowResistance = close <= offsetLeadline2
+
+// ==================== ENTRY CONDITIONS ====================
+// Check if within trading session
+inTradingSession = not na(time(timeframe.period, tradingSession))
+
+// Long entry: TK Cross Up + Price Above Cloud Support + Bullish Cloud
+longCondition = TKCrossUp and priceAboveSupport and bullishCloud
+longSignal = longCondition and not longCondition[1]
+longEntry = longSignal and strategy.position_size == 0 and inTradingSession
+
+// ==================== TRAILING STOP LOSS LOGIC ====================
+var float entryPrice = na
+var float currentStopLevel = na
+var float highestProfitPercent = na
+
+// Track entry price and reset variables on new position
+if longEntry
+    entryPrice := close
+    // Set initial stop loss at -initialSLPercent% below entry
+    currentStopLevel := useTSL ? close * (1 - initialSLPercent / 100) : na
+    highestProfitPercent := 0.0
+
+// Calculate current profit percentage
+profitPercent = strategy.position_size > 0 ? (close - entryPrice) / entryPrice * 100 : 0.0
+
+// Update trailing stop based on arithmetic progression (1% increments)
+if useTSL and strategy.position_size > 0
+    // Calculate how many increment steps we've achieved
+    stepsAchieved = math.floor(profitPercent / tslIncrement)
+
+    // Stop loss progression:
+    // Entry (0 steps)         -> SL at -initialSLPercent%
+    // At 1% profit (1 step)   -> SL at 0% (breakeven)
+    // At 2% profit (2 steps)  -> SL at 1%
+    // At 3% profit (3 steps)  -> SL at 2%
+    // At 4% profit (4 steps)  -> SL at 3%
+    // etc.
+    if stepsAchieved >= 1
+        newStopPercent = (stepsAchieved - 1) * tslIncrement
+        newStopPrice = entryPrice * (1 + newStopPercent / 100)
+
+        // Only update if new stop is higher (trailing up only)
+        if newStopPrice > currentStopLevel
+            currentStopLevel := newStopPrice
+
+// ==================== EXIT CONDITIONS ====================
+// Exit 1: TK Cross Down (bearish signal)
+exitTKCross = strategy.position_size > 0 and TKCrossDown
+
+// Exit 2: Trailing stop loss hit (only if TSL is enabled)
+trailingStopHit = useTSL and strategy.position_size > 0 and not na(currentStopLevel) and close < currentStopLevel
+
+// Exit 3: End of day - close positions before session ends
+inEodWindow = not na(time(timeframe.period, eodTime))
+eodExit = closeEOD and strategy.position_size > 0 and inEodWindow
+
+// ==================== EXECUTE TRADES ====================
+if longEntry
+    strategy.entry("Long", strategy.long)
+
+if exitTKCross
+    strategy.close("Long", comment="TK Cross Down")
+
+if trailingStopHit
+    strategy.close("Long", comment="Trailing SL")
+
+if eodExit
+    strategy.close("Long", comment="EOD Exit")
+
+// ==================== PLOTTING ====================
+// Highlight trading session
+bgcolor(inTradingSession ? color.new(color.green, 95) : na, title="Trading Session")
+
+// Plot Ichimoku Lines
+plot(conversionLine, color=#2962FF, linewidth=2, title="Conversion Line (Tenkan)")
+plot(baseLine, color=#B71C1C, linewidth=2, title="Base Line (Kijun)")
+
+// Plot Ichimoku Cloud
+p1 = plot(leadLine1, offset = displacement - 1, color=#A5D6A7, title="Leading Span A")
+p2 = plot(leadLine2, offset = displacement - 1, color=#EF9A9A, title="Leading Span B")
+fill(p1, p2, color = leadLine1 > leadLine2 ? color.rgb(67, 160, 71, 50) : color.rgb(244, 67, 54, 50))
+
+// Plot trailing stop level when in position (only if TSL enabled)
+stopPlot = useTSL and strategy.position_size > 0 and not na(currentStopLevel) ? currentStopLevel : na
+plot(stopPlot, color=color.red, linewidth=2, style=plot.style_stepline, title="Trailing Stop")
+
+// Plot entry price when in position
+entryPlot = strategy.position_size > 0 ? entryPrice : na
+plot(entryPlot, color=color.green, linewidth=1, style=plot.style_linebr, title="Entry Price")
+
+// Plot entry signals
+plotshape(longEntry, style=shape.labelup, location=location.belowbar, color=color.green, size=size.normal, text="LONG", textcolor=color.white, title="Long Entry Signal")
+
+// ==================== LABELS & INFO ====================
+// Show profit percentage and stop level on chart
+if barstate.islast and strategy.position_size > 0
+    labelText = "Profit: " + str.tostring(profitPercent, "#.##") + "%\n"
+    labelText += not useTSL ? "TSL: Disabled" : na(currentStopLevel) ? "TSL: Not Active" : "TSL: " + str.tostring(currentStopLevel, "#.##") + " (" + str.tostring((currentStopLevel - entryPrice) / entryPrice * 100, "#.##") + "%)"
+    label.new(bar_index, high, labelText, style=label.style_label_down, color=color.new(color.blue, 80), textcolor=color.white)
+
+// ==================== ALERTS ====================
+alertcondition(longEntry, title="Long Entry", message="Ichimoku Long Entry Signal")
+alertcondition(exitTKCross, title="TK Cross Exit", message="TK Cross Down - Exit Signal")
+alertcondition(trailingStopHit, title="Trailing Stop Hit", message="Trailing Stop Loss triggered")
+alertcondition(eodExit, title="EOD Exit", message="End of day - closing position")
