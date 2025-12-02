@@ -67,8 +67,7 @@ if shortEntry
     positionDirection := -1
 
 // Calculate current profit percentage (works for both long and short)
-profitPercent = strategy.position_size > 0 ? (close - entryPrice) / entryPrice * 100 :
-                strategy.position_size < 0 ? (entryPrice - close) / entryPrice * 100 : 0.0
+profitPercent = strategy.position_size > 0 ? (close - entryPrice) / entryPrice * 100 : strategy.position_size < 0 ? (entryPrice - close) / entryPrice * 100 : 0.0
 
 // Update trailing stop based on arithmetic progression (1% increments)
 if useTSL and strategy.position_size != 0
