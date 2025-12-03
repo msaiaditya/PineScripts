@@ -1,5 +1,5 @@
 //@version=5
-strategy("Ichimoku Cloud with Trailing SL", shorttitle="Ichi TSL", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100)
+strategy("Ichimoku Cloud with Trailing SL", shorttitle="Ichi TSL", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=100, margin_long=100, margin_short=100)
 
 // Description: Long/Short crypto strategy using Ichimoku Cloud for entries with arithmetic progression trailing stop loss
 // Long Entry: TK Cross Up + Price Above Cloud Support + Bullish Cloud + Bull Regime
@@ -17,6 +17,9 @@ displacement = input.int(30, minval=1, title="Displacement", group="Ichimoku")
 // Trade Direction Settings
 enableLong = input.bool(true, title="Enable Long Trades", group="Trade Direction")
 enableShort = input.bool(true, title="Enable Short Trades", group="Trade Direction")
+
+// Leverage Settings
+leverage = input.int(1, minval=1, maxval=125, title="Leverage", group="Position Sizing", tooltip="Leverage multiplier (1-125x). Position size = Equity × Leverage")
 
 // Regime Filter Settings
 regimeTimeframe = input.string("D", title="Regime Timeframe", options=["240", "D", "W"], group="Regime Filter", tooltip="4H, Daily, or Weekly")
@@ -157,11 +160,14 @@ exitShortTKCross = strategy.position_size < 0 and TKCrossUp
 shortTrailingStopHit = useTSL and strategy.position_size < 0 and not na(currentStopLevel) and close > currentStopLevel
 
 // ==================== EXECUTE TRADES ====================
+// Calculate leveraged position size (in units of the asset)
+leveragedQty = (strategy.equity * leverage) / close
+
 if longEntry
-    strategy.entry("Long", strategy.long)
+    strategy.entry("Long", strategy.long, qty=leveragedQty)
 
 if shortEntry
-    strategy.entry("Short", strategy.short)
+    strategy.entry("Short", strategy.short, qty=leveragedQty)
 
 if exitLongTKCross
     strategy.close("Long", comment="TK Cross Down")
