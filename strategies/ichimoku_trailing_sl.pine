@@ -32,18 +32,17 @@ tslIncrement = input.float(1.0, minval=0.5, step=0.5, title="TSL Increment (%)",
 initialSLPercent = input.float(1.0, minval=0.5, step=0.5, title="Initial Stop Loss (%)", group="Trailing Stop Loss", tooltip="Initial stop loss distance from entry price")
 
 // ==================== REGIME CALCULATION ====================
-// Donchian calculation for regime timeframe
-regimeDonchian(len) =>
-    math.avg(ta.lowest(low, len), ta.highest(high, len))
-
 // Calculate regime Ichimoku components on higher timeframe
-[htfTenkan, htfKijun, htfSpanA, htfSpanB, htfClose] = request.security(syminfo.tickerid, regimeTimeframe, [
-    regimeDonchian(regimeTenkanPeriod),
-    regimeDonchian(regimeKijunPeriod),
-    math.avg(regimeDonchian(regimeTenkanPeriod), regimeDonchian(regimeKijunPeriod)),
-    regimeDonchian(regimeSenkouBPeriod),
-    close
-], lookahead=barmerge.lookahead_off)
+regimeDonchian(len) => math.avg(ta.lowest(low, len), ta.highest(high, len))
+
+// Calculate Span A and Span B for regime
+regimeSpanA = math.avg(regimeDonchian(regimeTenkanPeriod), regimeDonchian(regimeKijunPeriod))
+regimeSpanB = regimeDonchian(regimeSenkouBPeriod)
+
+// Get higher timeframe values
+htfSpanA = request.security(syminfo.tickerid, regimeTimeframe, regimeSpanA, lookahead=barmerge.lookahead_off)
+htfSpanB = request.security(syminfo.tickerid, regimeTimeframe, regimeSpanB, lookahead=barmerge.lookahead_off)
+htfClose = request.security(syminfo.tickerid, regimeTimeframe, close, lookahead=barmerge.lookahead_off)
 
 // Determine regime state: 1 = Bull, -1 = Bear, 0 = Neutral
 // Bull: Close > Span A AND Close > Span B (above cloud)
