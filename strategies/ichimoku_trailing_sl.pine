@@ -23,9 +23,9 @@ leverage = input.int(1, minval=1, maxval=125, title="Leverage", group="Position 
 
 // Regime Filter Settings
 regimeTimeframe = input.string("D", title="Regime Timeframe", options=["240", "D", "W"], group="Regime Filter", tooltip="4H, Daily, or Weekly")
-regimeTenkanPeriod = input.int(9, minval=1, title="Regime Tenkan Period", group="Regime Filter")
-regimeKijunPeriod = input.int(26, minval=1, title="Regime Kijun Period", group="Regime Filter")
-regimeSenkouBPeriod = input.int(52, minval=1, title="Regime Senkou B Period", group="Regime Filter")
+regimeTenkanPeriod = input.int(20, minval=1, title="Regime Tenkan Period", group="Regime Filter")
+regimeKijunPeriod = input.int(60, minval=1, title="Regime Kijun Period", group="Regime Filter")
+regimeSenkouBPeriod = input.int(120, minval=1, title="Regime Senkou B Period", group="Regime Filter")
 allowNeutralTrades = input.bool(false, title="Allow Trades in Neutral", group="Regime Filter", tooltip="When enabled, both long and short trades are allowed in neutral regime")
 showRegimeBackground = input.bool(true, title="Show Regime Background", group="Regime Filter")
 
