@@ -123,19 +123,20 @@ if shortEntry
 // Calculate current profit percentage (works for both long and short)
 profitPercent = strategy.position_size > 0 ? (close - entryPrice) / entryPrice * 100 : strategy.position_size < 0 ? (entryPrice - close) / entryPrice * 100 : 0.0
 
-// Update trailing stop based on arithmetic progression (1% increments)
+// Update trailing stop based on arithmetic progression
 if useTSL and strategy.position_size != 0
     // Calculate how many increment steps we've achieved
     stepsAchieved = math.floor(profitPercent / tslIncrement)
 
-    // Stop loss progression:
-    // Entry (0 steps)         -> SL at -initialSLPercent%
-    // At 1% profit (1 step)   -> SL at 0% (breakeven)
-    // At 2% profit (2 steps)  -> SL at 1%
-    // At 3% profit (3 steps)  -> SL at 2%
-    // etc.
+    // Stop loss progression (with 5% initial SL and 2% increment example):
+    // Entry (0 steps)         -> SL at -5%
+    // At 2% profit (1 step)   -> SL at -3%
+    // At 4% profit (2 steps)  -> SL at -1%
+    // At 6% profit (3 steps)  -> SL at +1%
+    // At 8% profit (4 steps)  -> SL at +3%
+    // Formula: SL% = -initialSL + (steps × increment)
     if stepsAchieved >= 1
-        newStopPercent = (stepsAchieved - 1) * tslIncrement
+        newStopPercent = -initialSLPercent + (stepsAchieved * tslIncrement)
 
         if positionDirection == 1  // Long position
             newStopPrice = entryPrice * (1 + newStopPercent / 100)
